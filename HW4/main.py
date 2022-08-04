@@ -8,28 +8,18 @@ from torch.utils.data import Dataset, DataLoader
 
 # %%
 
-# f = open('./Dataset/metadata.json', 'r')
-# t = json.load(f)
-# print(t['n_mels'])
-#
-# print(len(t['speakers']['id03074'][0]['feature_path']))
-# path = t['speakers']['id03074'][0]['feature_path']
-# print(path)
-# tensor = torch.load(os.path.join('Dataset', path))
-# print(tensor.shape)
-# transformer = nn.TransformerEncoderLayer(40, 8)
-# x = torch.rand([2,123,40])
-# y = transformer(x)
-# print(y.shape)
-# x2 = torch.rand([3,123,40])
-# y = transformer(x, x2)
-# print(y.shape)
+
 # %%
-metadata = json.load(open(os.path.join('Dataset', 'metadata.json', 'r')))
-testdata = json.load(open(os.path.join('Dataset', 'testdata.json', 'r')))
-mapping = json.load(open(os.path.join('Dataset', 'mapping.json', 'r')))
+metadata = json.load(open(os.path.join('Dataset', 'metadata.json'), 'r'))
+testdata = json.load(open(os.path.join('Dataset', 'testdata.json', ), 'r'))
+mapping = json.load(open(os.path.join('Dataset', 'mapping.json', ), 'r'))
 n_speakers = len(mapping['speaker2id'])
-n = sum([len(id) for id in metadata['speakers']])
+min_d = min([min([x['mel_len'] for x in metadata['speakers'][id]]) for id in metadata['speakers']])
+print(min_d)
+# print(len(metadata['speakers']))
+# for id in metadata['speakers']:
+#     print(id)
+n = sum([len(metadata['speakers'][id]) for id in metadata['speakers']])
 d_model = metadata['n_mels']
 train_index = torch.randperm(n)[:int(n * 0.9)].tolist()
 
@@ -45,19 +35,23 @@ class MyDataset(Dataset):
         if self.mode == 'train' or self.mode == 'validate':
             speakers = metadata['speakers']
             for speaker in speakers.keys():
-                self.data.append([speakers[speaker], speaker])
+                for path in speakers[speaker]:
+
+                    self.data.append([path, speaker])
+                print(len(self.data), n)
             if self.mode == 'train':
                 self.data = [self.data[x] for x in train_index]
             else:
                 self.data = [self.data[x] for x in range(n) if x not in train_index]
         else:
             self.data = testdata['utterances']
-
+        # print(self.data[0][1])
     def __len__(self):
         return len(self.data)
 
     def __getitem__(self, index):
-        x = torch.load(open(os.path.join('Dataset', self.data[index][0]['feature_path'])))
+        # print(os.path.join('Dataset', self.data[index][0]['feature_path']))
+        x = torch.load(os.path.join('Dataset', self.data[index][0]['feature_path']))
         y = mapping['speaker2id'][self.data[index][1]]
         # if x.shape[0] >
         if self.mode == 'test':
@@ -65,9 +59,9 @@ class MyDataset(Dataset):
         else:
             return x, y
 
-train_data = DataLoader(MyDataset('train'), num_workers=12, shuffle=True, batch_size=256)
-validation_data = DataLoader(MyDataset('validate'), num_workers=12, shuffle=False, batch_size=256)
-test_data = DataLoader(MyDataset('test'), num_workers=12, shuffle=False, batch_size=256)
+train_data = DataLoader(MyDataset('train'),  shuffle=True, batch_size=256)
+validation_data = DataLoader(MyDataset('validate'),  shuffle=False, batch_size=256)
+test_data = DataLoader(MyDataset('test'),  shuffle=False, batch_size=256)
 
 
 class MyNet(nn.Module):
@@ -83,3 +77,22 @@ class MyNet(nn.Module):
         return self.fc(x)
 
 
+config = {'d_moedl': d_model, 'epoch': 10, 'lr': 0.01}
+
+net = MyNet(d_model)
+loss = nn.CrossEntropyLoss()
+optimizer = torch.optim.Adam(net.parameters(), lr=config['lr'])
+
+def train():
+    net.train()
+    for i in range(config['epoch']):
+        for x, y in train_data:
+            optimizer.zero_grad()
+            pred = net(x)
+            loss_v = loss(pred, y)
+            loss_v.backward()
+            optimizer.step()
+            print('loss = ', loss_v)
+
+
+train()
