@@ -17,7 +17,7 @@ from torch.utils.data import Dataset, DataLoader
 # print(path)
 # tensor = torch.load(os.path.join('Dataset', path))
 # print(tensor.shape)
-transformer = nn.TransformerEncoderLayer(40, 8)
+# transformer = nn.TransformerEncoderLayer(40, 8)
 # x = torch.rand([2,123,40])
 # y = transformer(x)
 # print(y.shape)
@@ -28,6 +28,7 @@ transformer = nn.TransformerEncoderLayer(40, 8)
 metadata = json.load(open(os.path.join('Dataset', 'metadata.json', 'r')))
 testdata = json.load(open(os.path.join('Dataset', 'testdata.json', 'r')))
 mapping = json.load(open(os.path.join('Dataset', 'mapping.json', 'r')))
+n_speakers = len(mapping['speaker2id'])
 n = sum([len(id) for id in metadata['speakers']])
 d_model = metadata['n_mels']
 train_index = torch.randperm(n)[:int(n * 0.9)].tolist()
@@ -63,3 +64,22 @@ class MyDataset(Dataset):
             return x
         else:
             return x, y
+
+train_data = DataLoader(MyDataset('train'), num_workers=12, shuffle=True, batch_size=256)
+validation_data = DataLoader(MyDataset('validate'), num_workers=12, shuffle=False, batch_size=256)
+test_data = DataLoader(MyDataset('test'), num_workers=12, shuffle=False, batch_size=256)
+
+
+class MyNet(nn.Module):
+    def __init__(self, d_model=d_model):
+        super().__init__()
+        self.encoder = nn.TransformerEncoderLayer(d_model=d_model, dropout=0.1, batch_first=True, nhead=8)
+        self.fc = nn.Linear(d_model, n_speakers)
+
+    def forward(self, x):
+        x = self.encoder(x)
+        x = x.mean(dim=1)
+        x = nn.ReLU(x)
+        return self.fc(x)
+
+
